@@ -594,8 +594,7 @@ virStorageBackendISCSIFindPoolSources(virConnectPtr conn ATTRIBUTE_UNUSED,
             virReportOOMError();
             goto cleanup;
         }
-        list.sources[i].nhost = 1;
-        list.sources[i].hosts[0] = source->hosts[0];
+        list.sources[i].host = source->hosts[0];
         list.sources[i].initiator = source->initiator;
         list.sources[i].ndevice = 1;
         list.sources[i].devices[0].path = targets[i];
