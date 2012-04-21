@@ -52,7 +52,7 @@ VIR_ENUM_IMPL(virStoragePool,
               VIR_STORAGE_POOL_LAST,
               "dir", "fs", "netfs",
               "logical", "disk", "iscsi",
-              "scsi", "mpath")
+              "scsi", "mpath", "rbd")
 
 VIR_ENUM_IMPL(virStoragePoolFormatFileSystem,
               VIR_STORAGE_POOL_FS_LAST,
@@ -110,6 +110,7 @@ enum {
     VIR_STORAGE_POOL_SOURCE_ADAPTER         = (1<<3),
     VIR_STORAGE_POOL_SOURCE_NAME            = (1<<4),
     VIR_STORAGE_POOL_SOURCE_INITIATOR_IQN   = (1<<5),
+    VIR_STORAGE_POOL_SOURCE_NETWORK         = (1<<6),
 };
 
 
@@ -191,6 +192,16 @@ static virStoragePoolTypeInfo poolTypeInfo[] = {
             .flags = (VIR_STORAGE_POOL_SOURCE_ADAPTER),
         },
       .volOptions = {
+            .formatToString = virStoragePoolFormatDiskTypeToString,
+        }
+    },
+    { .poolType = VIR_STORAGE_POOL_RBD,
+      .poolOptions = {
+             .flags = (VIR_STORAGE_POOL_SOURCE_HOST |
+                       VIR_STORAGE_POOL_SOURCE_NETWORK |
+                       VIR_STORAGE_POOL_SOURCE_NAME),
+        },
+       .volOptions = {
             .formatToString = virStoragePoolFormatDiskTypeToString,
         }
     },
@@ -297,6 +308,11 @@ virStoragePoolSourceClear(virStoragePoolSourcePtr source)
         VIR_FREE(source->auth.chap.login);
         VIR_FREE(source->auth.chap.passwd);
     }
+
+    if (source->authType == VIR_STORAGE_POOL_AUTH_CEPHX) {
+        VIR_FREE(source->auth.cephx.username);
+        VIR_FREE(source->auth.cephx.secret.usage);
+    }
 }
 
 void
@@ -399,6 +415,34 @@ virStoragePoolDefParseAuthChap(xmlXPathContextPtr ctxt,
 }
 
 static int
+virStoragePoolDefParseAuthCephx(xmlXPathContextPtr ctxt,
+                               virStoragePoolAuthCephxPtr auth) {
+    char *uuid = NULL;
+    auth->username = virXPathString("string(./auth/@username)", ctxt);
+    if (auth->username == NULL) {
+        virStorageReportError(VIR_ERR_XML_ERROR,
+                              "%s", _("missing auth username attribute"));
+        return -1;
+    }
+
+    uuid = virXPathString("string(./auth/secret/@uuid)", ctxt);
+    auth->secret.usage = virXPathString("string(./auth/secret/@usage)", ctxt);
+    if (uuid == NULL && auth->secret.usage == NULL) {
+        virStorageReportError(VIR_ERR_XML_ERROR,
+                              "%s", _("missing auth secret uuid or usage attribute"));
+        return -1;
+    }
+
+    if (virUUIDParse(uuid, auth->secret.uuid) < 0) {
+        virStorageReportError(VIR_ERR_XML_ERROR,
+                              "%s", _("invalid auth secret uuid"));
+        return -1;
+    }
+
+    return 0;
+}
+
+static int
 virStoragePoolDefParseSource(xmlXPathContextPtr ctxt,
                              virStoragePoolSourcePtr source,
                              int pool_type,
@@ -419,6 +463,12 @@ virStoragePoolDefParseSource(xmlXPathContextPtr ctxt,
     }
 
     source->name = virXPathString("string(./name)", ctxt);
+    if (pool_type == VIR_STORAGE_POOL_RBD && source->name == NULL) {
+        virStorageReportError(VIR_ERR_XML_ERROR,
+                                  "%s", _("missing mandatory 'name' field for RBD pool name"));
+            VIR_FREE(source->name);
+            goto cleanup;
+    }
 
     if (options->formatFromString) {
         char *format = virXPathString("string(./format/@type)", ctxt);
@@ -500,6 +550,8 @@ virStoragePoolDefParseSource(xmlXPathContextPtr ctxt,
     } else {
         if (STREQ(authType, "chap")) {
             source->authType = VIR_STORAGE_POOL_AUTH_CHAP;
+        } else if (STREQ(authType, "ceph")) {
+            source->authType = VIR_STORAGE_POOL_AUTH_CEPHX;
         } else {
             virStorageReportError(VIR_ERR_XML_ERROR,
                                   _("unknown auth type '%s'"),
@@ -510,6 +562,11 @@ virStoragePoolDefParseSource(xmlXPathContextPtr ctxt,
 
     if (source->authType == VIR_STORAGE_POOL_AUTH_CHAP) {
         if (virStoragePoolDefParseAuthChap(ctxt, &source->auth.chap) < 0)
+            goto cleanup;
+    }
+
+    if (source->authType == VIR_STORAGE_POOL_AUTH_CEPHX) {
+        if (virStoragePoolDefParseAuthCephx(ctxt, &source->auth.cephx) < 0)
             goto cleanup;
     }
 
@@ -740,20 +797,22 @@ virStoragePoolDefParseXML(xmlXPathContextPtr ctxt) {
         }
     }
 
-    if ((tmppath = virXPathString("string(./target/path)", ctxt)) == NULL) {
-        virStorageReportError(VIR_ERR_XML_ERROR,
-                              "%s", _("missing storage pool target path"));
-        goto cleanup;
+    /* When we are working with a virtual disk we can skip the target path and permissions */
+    if (!(options->flags & VIR_STORAGE_POOL_SOURCE_NETWORK)) {
+        if ((tmppath = virXPathString("string(./target/path)", ctxt)) == NULL) {
+            virStorageReportError(VIR_ERR_XML_ERROR,
+                                  "%s", _("missing storage pool target path"));
+            goto cleanup;
+        }
+        ret->target.path = virFileSanitizePath(tmppath);
+        VIR_FREE(tmppath);
+        if (!ret->target.path)
+            goto cleanup;
+
+        if (virStorageDefParsePerms(ctxt, &ret->target.perms,
+                                    "./target/permissions", 0700) < 0)
+            goto cleanup;
     }
-    ret->target.path = virFileSanitizePath(tmppath);
-    VIR_FREE(tmppath);
-    if (!ret->target.path)
-        goto cleanup;
-
-
-    if (virStorageDefParsePerms(ctxt, &ret->target.perms,
-                                "./target/permissions", 0700) < 0)
-        goto cleanup;
 
     return ret;
 
@@ -821,11 +880,12 @@ virStoragePoolSourceFormat(virBufferPtr buf,
                            virStoragePoolSourcePtr src)
 {
     int i, j;
+    char uuid[VIR_UUID_STRING_BUFLEN];
 
     virBufferAddLit(buf,"  <source>\n");
     if ((options->flags & VIR_STORAGE_POOL_SOURCE_HOST) && src->nhost) {
         for (i = 0; i < src->nhost; i++) {
-            virBufferAsprintf(buf, " <host name='%s'", src->hosts[i].name);
+            virBufferAsprintf(buf, "  <host name='%s'", src->hosts[i].name);
             if (src->hosts[i].port)
                 virBufferAsprintf(buf, " port='%d'", src->hosts[i].port);
             virBufferAddLit(buf, "/>\n");
@@ -884,6 +944,24 @@ virStoragePoolSourceFormat(virBufferPtr buf,
                           src->auth.chap.login,
                           src->auth.chap.passwd);
 
+    if (src->authType == VIR_STORAGE_POOL_AUTH_CEPHX) {
+        virBufferAsprintf(buf,"    <auth username='%s' type='ceph'>\n",
+                          src->auth.cephx.username);
+
+        virBufferAsprintf(buf,"      %s", "<secret");
+        if (src->auth.cephx.secret.uuid != NULL) {
+            virUUIDFormat(src->auth.cephx.secret.uuid, uuid);
+            virBufferAsprintf(buf," uuid='%s'", uuid);
+        }
+
+        if (src->auth.cephx.secret.usage != NULL) {
+            virBufferAsprintf(buf," usage='%s'", src->auth.cephx.secret.usage);
+        }
+        virBufferAsprintf(buf,"%s", "/>\n");
+
+        virBufferAsprintf(buf,"    %s", "</auth>\n");
+    }
+
     if (src->vendor != NULL) {
         virBufferEscapeString(buf,"    <vendor name='%s'/>\n", src->vendor);
     }
@@ -931,25 +1009,28 @@ virStoragePoolDefFormat(virStoragePoolDefPtr def) {
     if (virStoragePoolSourceFormat(&buf, options, &def->source) < 0)
         goto cleanup;
 
-    virBufferAddLit(&buf,"  <target>\n");
+    /* RBD devices are no local block devs nor files, so it doesn't have a target */
+    if (def->type != VIR_STORAGE_POOL_RBD) {
+        virBufferAddLit(&buf,"  <target>\n");
 
-    if (def->target.path)
-        virBufferAsprintf(&buf,"    <path>%s</path>\n", def->target.path);
+        if (def->target.path)
+            virBufferAsprintf(&buf,"    <path>%s</path>\n", def->target.path);
 
-    virBufferAddLit(&buf,"    <permissions>\n");
-    virBufferAsprintf(&buf,"      <mode>0%o</mode>\n",
-                      def->target.perms.mode);
-    virBufferAsprintf(&buf,"      <owner>%u</owner>\n",
-                      (unsigned int) def->target.perms.uid);
-    virBufferAsprintf(&buf,"      <group>%u</group>\n",
-                      (unsigned int) def->target.perms.gid);
+        virBufferAddLit(&buf,"    <permissions>\n");
+        virBufferAsprintf(&buf,"      <mode>0%o</mode>\n",
+                          def->target.perms.mode);
+        virBufferAsprintf(&buf,"      <owner>%u</owner>\n",
+                          (unsigned int) def->target.perms.uid);
+        virBufferAsprintf(&buf,"      <group>%u</group>\n",
+                          (unsigned int) def->target.perms.gid);
 
-    if (def->target.perms.label)
-        virBufferAsprintf(&buf,"      <label>%s</label>\n",
-                          def->target.perms.label);
+        if (def->target.perms.label)
+            virBufferAsprintf(&buf,"      <label>%s</label>\n",
+                            def->target.perms.label);
 
-    virBufferAddLit(&buf,"    </permissions>\n");
-    virBufferAddLit(&buf,"  </target>\n");
+        virBufferAddLit(&buf,"    </permissions>\n");
+        virBufferAddLit(&buf,"  </target>\n");
+    }
     virBufferAddLit(&buf,"</pool>\n");
 
     if (virBufferError(&buf))
