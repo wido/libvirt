@@ -116,15 +116,15 @@ static int virStorageBackendRBDOpenRADOSConn(virStorageBackendRBDStatePtr *ptr,
         }
     } else {
         VIR_DEBUG("Not using cephx authorization");
+        if (rados_create(&ptr->cluster, NULL) < 0) {
+            virStorageReportError(VIR_ERR_INTERNAL_ERROR,
+                                  _("failed to create the RADOS cluster"));
+            goto cleanup;
+        }
         if (rados_conf_set(ptr->cluster, "auth_supported", "none") < 0) {
             virStorageReportError(VIR_ERR_INTERNAL_ERROR,
                                   _("failed to set RADOS option: %s"),
                                   "auth_supported");
-            goto cleanup;
-        }
-        if (rados_create(&ptr->cluster, NULL) < 0) {
-            virStorageReportError(VIR_ERR_INTERNAL_ERROR,
-                                  _("failed to create the RADOS cluster"));
             goto cleanup;
         }
     }
