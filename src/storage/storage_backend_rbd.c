@@ -49,9 +49,9 @@ static int virStorageBackendRBDOpenRADOSConn(virStorageBackendRBDStatePtr *ptr,
                                              virStoragePoolObjPtr pool)
 {
     int ret = -1;
-    unsigned char *secret_value;
+    unsigned char *secret_value = NULL;
     size_t secret_value_size;
-    char *rados_key;
+    char *rados_key = NULL;
     virBuffer mon_host = VIR_BUFFER_INITIALIZER;
     virSecretPtr secret = NULL;
     char secretUuid[VIR_UUID_STRING_BUFLEN];
