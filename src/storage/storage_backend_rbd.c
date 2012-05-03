@@ -484,6 +484,55 @@ cleanup:
     return ret;
 }
 
+static int virStorageBackendRBDResizeVol(virConnectPtr conn ATTRIBUTE_UNUSED,
+                                     virStoragePoolObjPtr pool ATTRIBUTE_UNUSED,
+                                     virStorageVolDefPtr vol,
+                                     unsigned long long capacity,
+                                     unsigned int flags)
+{
+    virStorageBackendRBDStatePtr ptr;
+    ptr.cluster = NULL;
+    ptr.ioctx = NULL;
+    rbd_image_t image = NULL;
+    int ret = -1;
+
+    virCheckFlags(0, -1);
+
+    if (virStorageBackendRBDOpenRADOSConn(&ptr, conn, pool) < 0) {
+        goto cleanup;
+    }
+
+    if (rados_ioctx_create(ptr.cluster,
+        pool->def->source.name, &ptr.ioctx) < 0) {
+        virStorageReportError(VIR_ERR_INTERNAL_ERROR,
+                               _("failed to create the RBD IoCTX. Does the pool '%s' exist?"),
+                               pool->def->source.name);
+        goto cleanup;
+    }
+
+    if (rbd_open(ptr.ioctx, vol->name, &image, NULL) < 0) {
+       virStorageReportError(VIR_ERR_INTERNAL_ERROR,
+                            _("failed to open the RBD image '%s'"),
+                            vol->name);
+       goto cleanup;
+    }
+
+    if (rbd_resize(image, capacity) < 0) {
+        virStorageReportError(VIR_ERR_INTERNAL_ERROR,
+                            _("failed to resize the RBD image '%s'"),
+                            vol->name);
+        goto cleanup;
+    }
+
+    ret = 0;
+
+cleanup:
+    if (image != NULL)
+       rbd_close(image);
+    virStorageBackendRBDCloseRADOSConn(ptr);
+    return ret;
+}
+
 virStorageBackend virStorageBackendRBD = {
     .type = VIR_STORAGE_POOL_RBD,
 
@@ -491,4 +540,5 @@ virStorageBackend virStorageBackendRBD = {
     .createVol = virStorageBackendRBDCreateVol,
     .refreshVol = virStorageBackendRBDRefreshVol,
     .deleteVol = virStorageBackendRBDDeleteVol,
+    .resizeVol = virStorageBackendRBDResizeVol,
 };
