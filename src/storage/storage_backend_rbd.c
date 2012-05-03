@@ -167,7 +167,7 @@ static int virStorageBackendRBDOpenRADOSConn(virStorageBackendRBDStatePtr *ptr,
     if (rados_connect(ptr->cluster) < 0) {
         virStorageReportError(VIR_ERR_INTERNAL_ERROR,
                               _("failed to connect to the RADOS monitor on: %s"),
-                              virBufferContentAndReset(&mon_host));
+                              mon_buff);
         goto cleanup;
     }
 
