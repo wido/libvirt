@@ -409,7 +409,7 @@ BuildRequires: device-mapper-devel
 %endif
 %if %{with_storage_rbd}
 BuildRequires: librbd-devel
-$endif
+%endif
 %endif
 %if %{with_numactl}
 # For QEMU/LXC numa info
