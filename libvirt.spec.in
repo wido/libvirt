@@ -408,7 +408,7 @@ BuildRequires: device-mapper
 BuildRequires: device-mapper-devel
 %endif
 %if %{with_storage_rbd}
-BuildRequires: librbd-devel
+BuildRequires: ceph-devel
 %endif
 %endif
 %if %{with_numactl}
@@ -563,7 +563,7 @@ Requires: device-mapper
 %endif
 %if %{with_storage_rbd}
 # For RBD support
-Requires: librbd1
+Requires: ceph
 %endif
 %if %{with_cgconfig}
 Requires: libcgroup
