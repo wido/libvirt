@@ -147,6 +147,17 @@ struct _virStoragePoolSourceHost {
     int port;
 };
 
+/*
+ * Key-value pairs for passing down options to storage pools.
+ * Eg NFS mount options or Ceph RBD options
+ */
+typedef struct _virStoragePoolSourceOptions virStoragePoolSourceOptions;
+typedef virStoragePoolSourceOptions *virStoragePoolSourceOptionsPtr;
+struct _virStoragePoolSourceOptions {
+    char *name;
+    char *value;
+};
+
 
 /*
  * For MSDOS partitions, the free area is important when
@@ -259,6 +270,10 @@ struct _virStoragePoolSource {
      * or lvm version, etc.
      */
     int format;
+
+    /* Key-value pairs with options for the pool */
+    int noptions;
+    virStoragePoolSourceOptionsPtr options;
 };
 
 typedef struct _virStoragePoolTarget virStoragePoolTarget;

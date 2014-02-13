@@ -270,6 +270,30 @@
         &lt;/target&gt;
       &lt;/pool&gt;</pre>
 
+    <h3>Mount options</h3>
+    <p>
+      It is also possible to influence the mount options used for NFS by
+      adding extra options in the pool's XML definition.
+    </p>
+    <pre>
+      &lt;pool type="netfs"&gt;
+        &lt;name&gt;virtimages&lt;/name&gt;
+        &lt;source&gt;
+          &lt;host name="nfs.example.com"/&gt;
+          &lt;dir path="/var/lib/virt/images"/&gt;
+          &lt;format type='nfs'/&gt;
+          &lt;option name='noatime'/&gt;
+          &lt;option name='rsize' value='8k'/&gt;
+        &lt;/source&gt;
+        &lt;target&gt;
+          &lt;path&gt;/var/lib/virt/images&lt;/path&gt;
+        &lt;/target&gt;
+      &lt;/pool&gt;</pre>
+    <p>
+      Storage pool options are support since <strong>1.2.6</strong>
+    </p>
+     
+
     <h3>Valid pool format types</h3>
     <p>
       The network filesystem pool supports the following formats:
@@ -560,6 +584,30 @@
             &lt;/auth&gt;
         &lt;/source&gt;
       &lt;/pool&gt;</pre>
+
+    <h3>RADOS cluster options</h3>
+    <p>
+      It is also possible to influence the RADOS cluster options used by librados
+      by adding extra options in the pool's XML definition.
+    </p>
+    <pre>
+      &lt;pool type="rbd"&gt;
+        &lt;name&gt;myrbdpool&lt;/name&gt;
+        &lt;source&gt;
+          &lt;name&gt;rbdpool&lt;/name&gt;
+            &lt;host name='1.2.3.4' port='6789'/&gt;
+            &lt;host name='my.ceph.monitor' port='6789'/&gt;
+            &lt;host name='third.ceph.monitor' port='6789'/&gt;
+            &lt;auth username='admin' type='ceph'&gt;
+              &lt;secret uuid='2ec115d7-3a88-3ceb-bc12-0ac909a6fd87'/&gt;
+            &lt;/auth&gt;
+          &lt;option name='rados_mon_op_timeout' value='10'/&gt;
+          &lt;option name='rados_osd_op_timeout' value='10'/&gt;
+        &lt;/source&gt;
+      &lt;/pool&gt;</pre>
+    <p>
+      Storage pool options are support since <strong>1.2.6</strong>
+    </p>
 
     <h3>Example volume output</h3>
     <pre>

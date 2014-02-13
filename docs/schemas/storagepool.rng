@@ -294,6 +294,22 @@
     </element>
   </define>
 
+  <define name='sourceinfooptions'>
+    <oneOrMore>
+      <element name='option'>
+        <attribute name='name'>
+          <text/>
+        </attribute>
+        <optional>
+          <attribute name='value'>
+            <text/>
+          </attribute>
+        </optional>
+        <empty/>
+      </element>
+    </oneOrMore>
+  </define>
+
   <define name='initiatorinfo'>
     <element name='initiator'>
       <element name='iqn'>

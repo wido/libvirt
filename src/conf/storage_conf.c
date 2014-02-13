@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <string.h>
+#include <regex.h>
 
 #include "virerror.h"
 #include "datatypes.h"
@@ -370,6 +371,11 @@ virStoragePoolSourceClear(virStoragePoolSourcePtr source)
     for (i = 0; i < source->ndevice; i++)
         virStoragePoolSourceDeviceClear(&source->devices[i]);
     VIR_FREE(source->devices);
+    for (i = 0; i < source->noptions; i++) {
+        VIR_FREE(source->options[i].name);
+        VIR_FREE(source->options[i].value);
+    }
+    VIR_FREE(source->options);
     VIR_FREE(source->dir);
     VIR_FREE(source->name);
     virStoragePoolSourceAdapterClear(source->adapter);
@@ -551,6 +557,32 @@ virStoragePoolDefParseAuth(xmlXPathContextPtr ctxt,
     return ret;
 }
 
+static int virStoragePoolDefVerifyOption(char *msg)
+{
+    regex_t regex;
+    int reti;
+    char msgbuf[100];
+    int ret = -1;
+    
+    reti = regcomp(&regex, "^[A-Za-z0-9][A-Za-z0-9_-]*[A-Za-z0-9]$", 0);
+    if (reti)
+        goto cleanup;
+
+    reti = regexec(&regex, msg, 0, NULL, 0);
+    if (!reti) {
+        ret = 0;
+    } else if (reti == REG_NOMATCH) {
+        ret = -1;
+    } else {
+        regerror(reti, &regex, msgbuf, sizeof(msgbuf));
+        ret = -2;
+    }
+
+cleanup:
+    regfree(&regex);
+    return ret;
+}
+
 static int
 virStoragePoolDefParseSource(xmlXPathContextPtr ctxt,
                              virStoragePoolSourcePtr source,
@@ -559,7 +591,7 @@ virStoragePoolDefParseSource(xmlXPathContextPtr ctxt,
 {
     int ret = -1;
     xmlNodePtr relnode, *nodeset = NULL;
-    int nsource;
+    int nsource, noptions;
     size_t i;
     virStoragePoolOptionsPtr options;
     char *name = NULL;
@@ -646,6 +678,44 @@ virStoragePoolDefParseSource(xmlXPathContextPtr ctxt,
         if (VIR_APPEND_ELEMENT(source->devices, source->ndevice, dev) < 0) {
             virStoragePoolSourceDeviceClear(&dev);
             goto cleanup;
+        }
+    }
+
+    noptions = virXPathNodeSet("./option", ctxt, &nodeset);
+    if (noptions > 0) {
+        if (VIR_ALLOC_N(source->options, noptions) < 0) {
+            VIR_FREE(nodeset);
+            goto cleanup;
+        }
+
+        source->noptions = noptions;
+
+        for (i = 0; i < noptions; i++) {
+            char *option = virXMLPropString(nodeset[i], "name");
+            if (option == NULL) {
+                virReportError(VIR_ERR_XML_ERROR, "%s",
+                               _("missing storage pool option attribute 'name'"));
+                goto cleanup;
+            } else if (virStoragePoolDefVerifyOption(option) < 0) {
+                virReportError(VIR_ERR_XML_ERROR, "%s: %s",
+                               _("invalid storage pool option"), option);
+                goto cleanup;
+            }
+            source->options[i].name = option;
+            
+            /*
+             * We allow values to be NULL.
+             * E.g. for a NFS mount: <option name='soft'/> or <option name='intr'/>
+             */
+            char *value = virXMLPropString(nodeset[i], "value");
+            if (value != NULL) {
+                if (virStoragePoolDefVerifyOption(value) < 0) {
+                    virReportError(VIR_ERR_XML_ERROR, "%s: %s",
+                                   _("invalid storage pool option value"), value);
+                    goto cleanup;
+                }
+                source->options[i].value = value;
+            }
         }
     }
 
@@ -1165,6 +1235,16 @@ virStoragePoolSourceFormat(virBufferPtr buf,
 
     virBufferEscapeString(buf, "<vendor name='%s'/>\n", src->vendor);
     virBufferEscapeString(buf, "<product name='%s'/>\n", src->product);
+
+    if (src->noptions) {
+        for (i = 0; i < src->noptions; i++) {
+            virBufferAsprintf(buf, "    <option name='%s'", src->options[i].name);
+            if (src->options[i].value != NULL) {
+                virBufferAsprintf(buf, " value='%s'", src->options[i].value);
+            }
+            virBufferAddLit(buf, "/>\n");
+        }
+    }
 
     virBufferAdjustIndent(buf, -2);
     virBufferAddLit(buf, "</source>\n");
