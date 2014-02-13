@@ -216,6 +216,22 @@ static int virStorageBackendRBDOpenRADOSConn(virStorageBackendRBDStatePtr ptr,
     VIR_DEBUG("Setting RADOS option rados_osd_op_timeout to %s", osd_op_timeout);
     rados_conf_set(ptr->cluster, "rados_osd_op_timeout", osd_op_timeout);
 
+    if (pool->def->source.noptions > 0) {
+        for (i = 0; i < pool->def->source.noptions; i++) {
+            if (pool->def->source.options[i].name != NULL &&
+                pool->def->source.options[i].value != NULL) {
+                VIR_DEBUG("Setting RADOS option %s to %s",
+                        pool->def->source.options[i].name,
+                        pool->def->source.options[i].value);
+                if (rados_conf_set(ptr->cluster, pool->def->source.options[i].name,
+                    pool->def->source.options[i].value) < 0) {
+                    virReportError(VIR_ERR_INTERNAL_ERROR, _("Failed to set RADOS option %s"),
+                                   pool->def->source.options[i].name);
+                }
+            }
+        }
+    }
+
     ptr->starttime = time(0);
     r = rados_connect(ptr->cluster);
     if (r < 0) {

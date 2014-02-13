@@ -568,6 +568,7 @@
         <ref name='sourceinfohost'/>
         <optional>
           <ref name='sourceinfoauth'/>
+          <ref name='sourceinfooptions'/>
         </optional>
       </interleave>
     </element>
