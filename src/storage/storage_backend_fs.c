@@ -377,6 +377,8 @@ static int
 virStorageBackendFileSystemMount(virStoragePoolObjPtr pool)
 {
     char *src = NULL;
+    char *options = NULL;
+    char *optionsflag = NULL;
     /* 'mount -t auto' doesn't seem to auto determine nfs (or cifs),
      *  while plain 'mount' does. We have to craft separate argvs to
      *  accommodate this */
@@ -385,8 +387,10 @@ virStorageBackendFileSystemMount(virStoragePoolObjPtr pool)
     bool glusterfs = (pool->def->type == VIR_STORAGE_POOL_NETFS &&
                       pool->def->source.format == VIR_STORAGE_POOL_NETFS_GLUSTERFS);
     virCommandPtr cmd = NULL;
+    virBuffer optionsbuf = VIR_BUFFER_INITIALIZER;
     int ret = -1;
     int rc;
+    int i;
 
     if (pool->def->type == VIR_STORAGE_POOL_NETFS) {
         if (pool->def->source.nhost != 1) {
@@ -432,9 +436,45 @@ virStorageBackendFileSystemMount(virStoragePoolObjPtr pool)
         if (VIR_STRDUP(src, pool->def->source.devices[0].path) < 0)
             return -1;
     }
+    
+    /*
+     * Mount options for NFS pool.
+     * For security reasons we do not simply build a string based on
+     * the given mount options. This is to prevent any shell injection
+     * or non-valid mount options.
+     */
+    if (pool->def->type == VIR_STORAGE_POOL_NETFS) {
+        if (pool->def->source.noptions > 0) {
+            for (i = 0; i < pool->def->source.noptions; i++) {
+                char *name = pool->def->source.options[i].name;
+                char *value = pool->def->source.options[i].value;
+                if (name != NULL && value == NULL)
+                        virBufferAsprintf(&optionsbuf, "%s,", name);
+
+                if (name != NULL && value != NULL)
+                        virBufferAsprintf(&optionsbuf, "%s=%s,", name, value);
+            }
+
+            if (virBufferError(&optionsbuf))
+                goto no_memory;
+
+            /*
+             * Strip the last character from the options string since
+             * that will be a comma.
+             */
+            options = virBufferContentAndReset(&optionsbuf);
+            if (options != NULL) {
+                options[strlen(options)-1] = 0;
+                if (virAsprintf(&optionsflag, "%s", "-o") == -1)
+                    return -1;
+            }
+        }
+    }
 
     if (netauto)
         cmd = virCommandNewArgList(MOUNT,
+                                   optionsflag,
+                                   options,
                                    src,
                                    pool->def->target.path,
                                    NULL);
@@ -455,6 +495,8 @@ virStorageBackendFileSystemMount(virStoragePoolObjPtr pool)
                                    (pool->def->type == VIR_STORAGE_POOL_FS ?
                                     virStoragePoolFormatFileSystemTypeToString(pool->def->source.format) :
                                     virStoragePoolFormatFileSystemNetTypeToString(pool->def->source.format)),
+                                   optionsflag,
+                                   options,
                                    src,
                                    pool->def->target.path,
                                    NULL);
@@ -463,6 +505,8 @@ virStorageBackendFileSystemMount(virStoragePoolObjPtr pool)
         goto cleanup;
 
     ret = 0;
+ no_memory:
+    virReportOOMError();
  cleanup:
     virCommandFree(cmd);
     VIR_FREE(src);
