@@ -421,6 +421,75 @@ static int virStorageBackendRBDRefreshPool(virConnectPtr conn,
     return ret;
 }
 
+static int virStorageBackendRBDCleanupSnapshots(rbd_image_t image,
+                                                virStoragePoolSourcePtr source,
+                                                virStorageVolDefPtr vol)
+{
+    int ret = -1;
+    int r = 0;
+    int max_snaps = 128;
+    int snap_count, protected;
+    size_t i;
+    rbd_snap_info_t *snaps;
+
+    do {
+        if (VIR_ALLOC_N(snaps, max_snaps))
+            goto cleanup;
+
+        snap_count = rbd_snap_list(image, snaps, &max_snaps);
+        if (snap_count <= 0)
+            VIR_FREE(snaps);
+
+    } while (snap_count == -ERANGE);
+
+    VIR_DEBUG("Found %d snapshots for volume %s/%s", snap_count,
+              source->name, vol->name);
+
+    if (snap_count > 0) {
+        for (i = 0; i < snap_count; i++) {
+            if (rbd_snap_is_protected(image, snaps[i].name, &protected)) {
+                virReportSystemError(-r, _("failed to verify if snapshot '%s/%s@%s' is protected"),
+                                     source->name, vol->name,
+                                     snaps[i].name);
+                goto cleanup;
+            }
+
+            if (protected == 1) {
+                VIR_DEBUG("Snapshot %s/%s@%s is protected needs to be "
+                          "unprotected", source->name, vol->name,
+                          snaps[i].name);
+
+                if (rbd_snap_unprotect(image, snaps[i].name) < 0) {
+                    virReportSystemError(-r, _("failed to unprotect snapshot '%s/%s@%s'"),
+                                         source->name, vol->name,
+                                         snaps[i].name);
+                    goto cleanup;
+                }
+            }
+
+            VIR_DEBUG("Removing snapshot %s/%s@%s", source->name,
+                      vol->name, snaps[i].name);
+
+            r = rbd_snap_remove(image, snaps[i].name);
+            if (r < 0) {
+                virReportSystemError(-r, _("failed to remove snapshot '%s/%s@%s'"),
+                                     source->name, vol->name,
+                                     snaps[i].name);
+                goto cleanup;
+            }
+        }
+    }
+
+    ret = 0;
+
+ cleanup:
+    if (snaps)
+        rbd_snap_list_end(snaps);
+
+    VIR_FREE(snaps);
+    return ret;
+}
+
 static int virStorageBackendRBDDeleteVol(virConnectPtr conn,
                                          virStoragePoolObjPtr pool,
                                          virStorageVolDefPtr vol,
@@ -431,6 +500,7 @@ static int virStorageBackendRBDDeleteVol(virConnectPtr conn,
     virStorageBackendRBDState ptr;
     ptr.cluster = NULL;
     ptr.ioctx = NULL;
+    rbd_image_t image = NULL;
 
     VIR_DEBUG("Removing RBD image %s/%s", pool->def->source.name, vol->name);
 
@@ -443,6 +513,24 @@ static int virStorageBackendRBDDeleteVol(virConnectPtr conn,
     if (virStorageBackendRBDOpenIoCTX(&ptr, pool) < 0)
         goto cleanup;
 
+    r = rbd_open(ptr.ioctx, vol->name, &image, NULL);
+    if (r < 0) {
+       virReportSystemError(-r, _("failed to open the RBD image '%s'"),
+                            vol->name);
+       goto cleanup;
+    }
+
+    if (flags & VIR_STORAGE_VOL_DELETE_WITH_SNAPSHOTS) {
+        if (virStorageBackendRBDCleanupSnapshots(image, &pool->def->source, vol) < 0)
+            goto cleanup;
+    }
+
+    /* We need to close the image before we can actually remove it */
+    if (rbd_close(image) < 0)
+        goto cleanup;
+
+    VIR_DEBUG("Removing volume %s/%s", pool->def->source.name, vol->name);
+
     r = rbd_remove(ptr.ioctx, vol->name);
     if (r < 0 && (-r) != ENOENT) {
         virReportSystemError(-r, _("failed to remove volume '%s/%s'"),
@@ -453,6 +541,9 @@ static int virStorageBackendRBDDeleteVol(virConnectPtr conn,
     ret = 0;
 
  cleanup:
+    if (image)
+        rbd_close(image);
+
     virStorageBackendRBDCloseRADOSConn(&ptr);
     return ret;
 }
