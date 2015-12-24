@@ -326,6 +326,18 @@ virStorageVolDefFree(virStorageVolDefPtr def)
     VIR_FREE(def);
 }
 
+void
+virStorageVolSnapDefFree(virStorageVolSnapDefPtr def)
+{
+    if (!def)
+        return;
+
+    VIR_FREE(def->name);
+    VIR_FREE(def->key);
+
+    VIR_FREE(def);
+}
+
 static void
 virStoragePoolSourceAdapterClear(virStoragePoolSourceAdapterPtr adapter)
 {
@@ -1483,6 +1495,105 @@ virStorageVolDefParseFile(virStoragePoolDefPtr pool,
 {
     return virStorageVolDefParse(pool, NULL, filename, flags);
 }
+
+static virStorageVolSnapDefPtr
+virStorageVolSnapDefParseXML(virStoragePoolDefPtr pool,
+                             xmlXPathContextPtr ctxt,
+                             unsigned int flags)
+{
+    virStorageVolSnapDefPtr ret;
+
+    virCheckFlags(0, NULL);
+
+    if (VIR_ALLOC(ret) < 0)
+        return NULL;
+
+    if (pool == NULL)
+        return NULL;
+
+    ret->name = virXPathString("string(./name)", ctxt);
+    if (ret->name == NULL) {
+        virReportError(VIR_ERR_XML_ERROR, "%s",
+                       _("missing snapshot name element"));
+        goto error;
+    }
+
+    ret->key = virXPathString("string(./key)", ctxt);
+
+
+ cleanup:
+    return ret;
+
+ error:
+    virStorageVolSnapDefFree(ret);
+    ret = NULL;
+    goto cleanup;
+}
+
+virStorageVolSnapDefPtr
+virStorageVolSnapDefParseNode(virStoragePoolDefPtr pool,
+                              xmlDocPtr xml,
+                              xmlNodePtr root,
+                              unsigned int flags)
+{
+    xmlXPathContextPtr ctxt = NULL;
+    virStorageVolSnapDefPtr def = NULL;
+
+    if (!xmlStrEqual(root->name, BAD_CAST "snapshot")) {
+        virReportError(VIR_ERR_XML_ERROR,
+                       _("unexpected root element <%s>, "
+                       "expecting <snapshot>"),
+                       root->name);
+        goto cleanup;
+    }
+
+    ctxt = xmlXPathNewContext(xml);
+    if (ctxt == NULL) {
+        virReportOOMError();
+        goto cleanup;
+    }
+
+    ctxt->node = root;
+    def = virStorageVolSnapDefParseXML(pool, ctxt, flags);
+
+ cleanup:
+    xmlXPathFreeContext(ctxt);
+    return def;
+}
+
+static virStorageVolSnapDefPtr
+virStorageVolSnapDefParse(virStoragePoolDefPtr pool,
+                          const char *xmlStr,
+                          const char *filename,
+                          unsigned int flags)
+{
+    virStorageVolSnapDefPtr ret = NULL;
+    xmlDocPtr xml;
+
+    if ((xml = virXMLParse(filename, xmlStr, _("(storage_volume_snapshot_definition)")))) {
+        ret = virStorageVolSnapDefParseNode(pool, xml, xmlDocGetRootElement(xml), flags);
+        xmlFreeDoc(xml);
+    }
+
+    return ret;
+}
+
+virStorageVolSnapDefPtr
+virStorageVolSnapDefParseString(virStoragePoolDefPtr pool,
+                                const char *xmlStr,
+                                unsigned int flags)
+{
+    return virStorageVolSnapDefParse(pool, xmlStr, NULL, flags);
+}
+
+virStorageVolSnapDefPtr
+virStorageVolSnapDefParseFile(virStoragePoolDefPtr pool,
+                              const char *filename,
+                              unsigned int flags)
+{
+    return virStorageVolSnapDefParse(pool, NULL, filename, flags);
+}
+
 
 static void
 virStorageVolTimestampFormat(virBufferPtr buf, const char *name,

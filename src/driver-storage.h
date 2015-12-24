@@ -154,6 +154,29 @@ typedef int
                                unsigned int algorithm,
                                unsigned int flags);
 
+typedef virStorageVolSnapPtr
+(*virDrvStorageVolSnapCreate)(virStorageVolPtr vol,
+                              const char *xmldesc,
+                              unsigned int flags);
+
+typedef int
+(*virDrvStorageVolSnapDelete)(virStorageVolSnapPtr snap,
+                              unsigned int flags);
+
+typedef int
+(*virDrvStorageVolSnapRevert)(virStorageVolSnapPtr snap,
+                              unsigned int flags);
+
+typedef int
+(*virDrvStorageVolSnapList)(virStorageVolPtr vol,
+                            virStorageVolSnapPtr **snaps,
+                            unsigned int flags);
+
+typedef int
+(*virDrvStorageVolSnapGetInfo)(virStorageVolSnapPtr snap,
+                               virStorageVolSnapInfoPtr info,
+                               unsigned int flags);
+
 typedef int
 (*virDrvStorageVolGetInfo)(virStorageVolPtr vol,
                            virStorageVolInfoPtr info);
@@ -243,6 +266,11 @@ struct _virStorageDriver {
     virDrvStorageVolDelete storageVolDelete;
     virDrvStorageVolWipe storageVolWipe;
     virDrvStorageVolWipePattern storageVolWipePattern;
+    virDrvStorageVolSnapCreate storageVolSnapCreate;
+    virDrvStorageVolSnapDelete storageVolSnapDelete;
+    virDrvStorageVolSnapRevert storageVolSnapRevert;
+    virDrvStorageVolSnapList storageVolSnapList;
+    virDrvStorageVolSnapGetInfo storageVolSnapGetInfo;
     virDrvStorageVolGetInfo storageVolGetInfo;
     virDrvStorageVolGetXMLDesc storageVolGetXMLDesc;
     virDrvStorageVolGetPath storageVolGetPath;

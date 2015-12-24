@@ -50,6 +50,7 @@
 #include "virstring.h"
 #include "viraccessapicheck.h"
 #include "dirname.h"
+#include "../../include/libvirt/libvirt-storage.h"
 
 #define VIR_FROM_THIS VIR_FROM_STORAGE
 
@@ -2502,6 +2503,102 @@ storageVolWipe(virStorageVolPtr obj,
     return storageVolWipePattern(obj, VIR_STORAGE_VOL_WIPE_ALG_ZERO, flags);
 }
 
+static virStorageVolSnapPtr
+storageVolSnapCreate(virStorageVolPtr obj,
+                     const char *xmldesc,
+                     unsigned int flags)
+{
+    virStorageBackendPtr backend;
+    virStoragePoolObjPtr pool = NULL;
+    virStorageVolSnapPtr ret = NULL;
+    virStorageVolSnapDefPtr snap = NULL;
+    virStorageVolDefPtr vol = NULL;
+
+    virCheckFlags(0, NULL);
+
+    if (!(vol = virStorageVolDefFromVol(obj, &pool, &backend)))
+        goto cleanup;
+
+    snap = virStorageVolSnapDefParseString(pool->def, xmldesc,
+                                              VIR_VOL_XML_PARSE_OPT_CAPACITY);
+
+    if (backend->volSnapCreate(obj->conn, pool, vol, snap, flags) < 0)
+        goto cleanup;
+
+
+ cleanup:
+    return ret;
+}
+
+static int
+storageVolSnapDelete(virStorageVolSnapPtr snap,
+                     unsigned int flags)
+{
+    int ret = -1;
+    virCheckFlags(0, -1);
+
+    if (snap == NULL)
+        goto cleanup;
+
+    ret = 0;
+
+ cleanup:
+    return ret;
+}
+
+static int
+storageVolSnapRevert(virStorageVolSnapPtr snap,
+                     unsigned int flags)
+{
+    int ret = -1;
+    virCheckFlags(0, -1);
+
+    if (snap == NULL)
+        goto cleanup;
+
+    ret = 0;
+
+    cleanup:
+    return ret;
+}
+
+static int
+storageVolSnapList(virStorageVolPtr vol,
+                   virStorageVolSnapPtr **snaps,
+                   unsigned int flags)
+{
+    int ret = -1;
+
+    virCheckFlags(0, -1);
+
+    if (vol == NULL || snaps == NULL)
+        goto cleanup;
+
+    ret = 0;
+
+ cleanup:
+    return ret;
+}
+
+static int
+storageVolSnapGetInfo(virStorageVolSnapPtr snap,
+                      virStorageVolSnapInfoPtr info,
+                      unsigned int flags)
+{
+    int ret = -1;
+
+    virCheckFlags(0, -1);
+
+    if (snap == NULL || info == NULL)
+        goto cleanup;
+
+    info = NULL;
+
+    ret = 0;
+
+ cleanup:
+    return ret;
+}
 
 static int
 storageVolGetInfo(virStorageVolPtr obj,
@@ -2642,6 +2739,11 @@ static virStorageDriver storageDriver = {
     .storageVolDelete = storageVolDelete, /* 0.4.0 */
     .storageVolWipe = storageVolWipe, /* 0.8.0 */
     .storageVolWipePattern = storageVolWipePattern, /* 0.9.10 */
+    .storageVolSnapCreate = storageVolSnapCreate, /* 1.3.2 */
+    .storageVolSnapDelete = storageVolSnapDelete, /* 1.3.2 */
+    .storageVolSnapRevert = storageVolSnapRevert, /* 1.3.2 */
+    .storageVolSnapList = storageVolSnapList, /* 1.3.2 */
+    .storageVolSnapGetInfo = storageVolSnapGetInfo, /* 1.3.2 */
     .storageVolGetInfo = storageVolGetInfo, /* 0.4.0 */
     .storageVolGetXMLDesc = storageVolGetXMLDesc, /* 0.4.0 */
     .storageVolGetPath = storageVolGetPath, /* 0.4.0 */

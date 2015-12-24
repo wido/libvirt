@@ -177,6 +177,31 @@ typedef enum {
     VIR_STORAGE_XML_INACTIVE    = (1 << 0), /* dump inactive pool/volume information */
 } virStorageXMLFlags;
 
+
+/**
+ * virStorageVolSnap:
+ *
+ * a virStorageVolSnap is a private structure representing a storage volume snapshot
+ */
+typedef struct _virStorageVolSnap virStorageVolSnap;
+
+/**
+ * virStorageVolSnapPtr:
+ *
+ * a virStorageVolSnapPtr is pointer to a virStorageVolSnap private structure, this is the
+ * type used to reference a volume snapshot in the API.
+ */
+typedef virStorageVolSnap *virStorageVolSnapPtr;
+
+typedef struct _virStorageVolSnapInfo virStorageVolSnapInfo;
+
+struct _virStorageVolSnapInfo {
+    int type;                      /* virStorageVolType flags */
+    unsigned long long allocated;  /* Current size of snapshot in bytes */
+};
+
+typedef virStorageVolSnapInfo *virStorageVolSnapInfoPtr;
+
 /*
  * Get connection from pool.
  */
@@ -349,6 +374,19 @@ int                     virStorageVolWipe               (virStorageVolPtr vol,
                                                          unsigned int flags);
 int                     virStorageVolWipePattern        (virStorageVolPtr vol,
                                                          unsigned int algorithm,
+                                                         unsigned int flags);
+virStorageVolSnapPtr    virStorageVolSnapCreate         (virStorageVolPtr vol,
+                                                         const char *xmldesc,
+                                                         unsigned int flags);
+int                     virStorageVolSnapDelete         (virStorageVolSnapPtr snap,
+                                                         unsigned int flags);
+int                     virStorageVolSnapRevert         (virStorageVolSnapPtr snap,
+                                                         unsigned int flags);
+int                     virStorageVolSnapList           (virStorageVolPtr vol,
+                                                         virStorageVolSnapPtr **snaps,
+                                                         unsigned int flags);
+int                     virStorageVolSnapGetInfo        (virStorageVolSnapPtr snap,
+                                                         virStorageVolSnapInfoPtr info,
                                                          unsigned int flags);
 int                     virStorageVolRef                (virStorageVolPtr vol);
 int                     virStorageVolFree               (virStorageVolPtr vol);

@@ -1810,6 +1810,149 @@ virStorageVolWipePattern(virStorageVolPtr vol,
     return -1;
 }
 
+/**
+ * virStorageVolSnapCreate
+ * @vol: pointer to storage volume
+ * @name: the name of the snapshot
+ * @flags: future flags, use 0 for now
+ *
+ * Create a snapshot of the volume on the backing storage
+ *
+ * Return virStorageVolSnapPtr or NULL on error
+ */
+virStorageVolSnapPtr
+virStorageVolSnapCreate(virStorageVolPtr vol,
+                        const char *xmldesc,
+                        unsigned int flags) {
+    virConnectPtr conn;
+    VIR_DEBUG("vol=%p, xmldesc=%s, flags=%x", vol, xmldesc, flags);
+
+    virResetLastError();
+
+    conn = vol->conn;
+
+    virCheckReadOnlyGoto(conn->flags, error);
+
+    if (conn->storageDriver && conn->storageDriver->storageVolSnapCreate) {
+        virStorageVolSnapPtr snap;
+        snap = conn->storageDriver->storageVolSnapCreate(vol, xmldesc, flags);
+        if (snap == NULL)
+            goto error;
+        return snap;
+    }
+
+    virReportUnsupportedError();
+
+    error:
+    virDispatchError(vol->conn);
+    return NULL;
+}
+
+/**
+ * virStorageVolSnapDelete
+ * @snap: The snapshot to remove
+ * @flags: future flags, use 0 for now
+ *
+ * Removes the snapshot of a volume
+ *
+ * Return 0 on success, -1 on error
+ */
+int
+virStorageVolSnapDelete(virStorageVolSnapPtr snap,
+                        unsigned int flags)
+{
+    if (snap == NULL)
+        goto error;
+
+    virCheckFlags(0, -1);
+
+    return 0;
+
+ error:
+    return -1;
+}
+
+/**
+ * virStorageVolSnapRevert
+ * @snap: The snapshot to revert a volume to
+ * @flags: future flags, use 0 for now
+ *
+ * Revert a volume to the specified snapshot
+ *
+ * Return 0 on succes, -1 on error
+ */
+int
+virStorageVolSnapRevert(virStorageVolSnapPtr snap,
+                        unsigned int flags)
+{
+    virCheckFlags(0, -1);
+
+    if (snap == NULL)
+        goto error;
+
+    return 0;
+
+ error:
+    return -1;
+}
+
+/**
+ * virStorageVolSnapList
+ * @vol: The volume to list the snapshots of
+ * @snaps: The snapshots of the volume. NULL if none found
+ * @flags: future flags, use 0 for now
+ *
+ * Lists all snapshots of a volume
+ *
+ * Returns 0 on succes or -1 on error. On error snaps will be set to NULL
+ */
+int
+virStorageVolSnapList(virStorageVolPtr vol,
+                      virStorageVolSnapPtr **snaps,
+                      unsigned int flags)
+{
+    virCheckFlags(0, -1);
+
+    if (vol == NULL || snaps == NULL)
+        goto error;
+
+    snaps = NULL;
+
+    return 0;
+
+ error:
+    snaps = NULL;
+    return -1;
+}
+
+/**
+ * virStorageVolSnapGetInfo
+ * @snap: Pointer to the snapshot
+ * @info: Will be filled with information about the snapshot
+ * @flags: future flags, use 0 for now
+ *
+ * Give back information about a snapshot
+ *
+ * Returns 0 on succes and -1 on error. On error info will be set to NULL
+ */
+int
+virStorageVolSnapGetInfo(virStorageVolSnapPtr snap,
+                         virStorageVolSnapInfoPtr info,
+                         unsigned int flags)
+{
+    virCheckFlags(0, -1);
+
+    if (snap == NULL || info == NULL)
+        goto error;
+
+    info = NULL;
+
+    return 0;
+
+ error:
+    info = NULL;
+    return -1;
+}
 
 /**
  * virStorageVolFree:

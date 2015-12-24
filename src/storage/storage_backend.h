@@ -102,6 +102,24 @@ typedef int (*virStorageBackendVolumeWipe)(virConnectPtr conn,
                                            unsigned int algorithm,
                                            unsigned int flags);
 
+typedef int (*virStorageBackendVolumeSnapCreate)(virConnectPtr conn,
+                                                 virStoragePoolObjPtr pool,
+                                                 virStorageVolDefPtr vol,
+                                                 virStorageVolSnapDefPtr snap,
+                                                 unsigned int flags);
+
+typedef int (*virStorageBackendVolumeSnapDelete)(virConnectPtr conn,
+                                                 virStoragePoolObjPtr pool,
+                                                 virStorageVolDefPtr vol,
+                                                 virStorageVolSnapDefPtr snap,
+                                                 unsigned int flags);
+
+typedef int (*virStorageBackendVolumeSnapRevert)(virConnectPtr conn,
+                                                 virStoragePoolObjPtr pool,
+                                                 virStorageVolDefPtr vol,
+                                                 virStorageVolSnapDefPtr snap,
+                                                 unsigned int flags);
+
 /* File creation/cloning functions used for cloning between backends */
 int virStorageBackendCreateRaw(virConnectPtr conn,
                                virStoragePoolObjPtr pool,
@@ -165,6 +183,9 @@ struct _virStorageBackend {
     virStorageBackendVolumeUpload uploadVol;
     virStorageBackendVolumeDownload downloadVol;
     virStorageBackendVolumeWipe wipeVol;
+    virStorageBackendVolumeSnapCreate volSnapCreate;
+    virStorageBackendVolumeSnapDelete volSnapDelete;
+    virStorageBackendVolumeSnapRevert volSnapRevert;
 };
 
 virStorageBackendPtr virStorageBackendForType(int type);

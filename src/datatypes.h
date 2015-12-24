@@ -495,6 +495,22 @@ struct _virStorageVol {
 };
 
 /**
+ * _virStorageVolSnap:
+ *
+ * Internal structure associated to a storage volume snapshot
+ */
+struct _virStorageVolSnap {
+    virObject object;
+    virConnectPtr conn;
+    char *vol;                          /* Name of the parent volume */
+    char *name;                         /* Name of the snapshot */
+    char *key;                          /* unique key of the snapshot */
+
+    void *privateData;
+    virFreeCallback privateDataFreeFunc;
+};
+
+/**
  * _virNodeDevice:
  *
  * Internal structure associated with a node device

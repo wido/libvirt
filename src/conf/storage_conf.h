@@ -79,6 +79,22 @@ struct _virStorageVolDefList {
     virStorageVolDefPtr *objs;
 };
 
+typedef struct _virStorageVolSnapDef virStorageVolSnapDef;
+typedef virStorageVolSnapDef *virStorageVolSnapDefPtr;
+struct _virStorageVolSnapDef {
+    char *name;
+    char *key;
+
+    virStorageVolDef vol;
+};
+
+typedef struct _virStorageVolSnapDefList virStorageVolSnapDefList;
+typedef virStorageVolSnapDefList *virStorageVolSnapDefListPtr;
+struct _virStorageVolSnapDefList {
+    size_t count;
+    virStorageVolSnapDefPtr *objs;
+};
+
 VIR_ENUM_DECL(virStorageVol)
 
 typedef enum {
@@ -363,8 +379,16 @@ virStorageVolDefPtr
 virStorageVolDefParseString(virStoragePoolDefPtr pool,
                             const char *xml,
                             unsigned int flags);
+virStorageVolSnapDefPtr
+virStorageVolSnapDefParseString(virStoragePoolDefPtr pool,
+                                const char *xml,
+                                unsigned int flags);
 virStorageVolDefPtr
 virStorageVolDefParseFile(virStoragePoolDefPtr pool,
+                          const char *filename,
+                          unsigned int flags);
+virStorageVolSnapDefPtr
+virStorageVolSnapDefParseFile(virStoragePoolDefPtr pool,
                           const char *filename,
                           unsigned int flags);
 virStorageVolDefPtr
@@ -372,6 +396,11 @@ virStorageVolDefParseNode(virStoragePoolDefPtr pool,
                           xmlDocPtr xml,
                           xmlNodePtr root,
                           unsigned int flags);
+virStorageVolSnapDefPtr
+virStorageVolSnapDefParseNode(virStoragePoolDefPtr pool,
+                              xmlDocPtr xml,
+                              xmlNodePtr root,
+                              unsigned int flags);
 char *virStorageVolDefFormat(virStoragePoolDefPtr pool,
                              virStorageVolDefPtr def);
 
@@ -389,6 +418,7 @@ int virStoragePoolObjSaveDef(virStorageDriverStatePtr driver,
 int virStoragePoolObjDeleteDef(virStoragePoolObjPtr pool);
 
 void virStorageVolDefFree(virStorageVolDefPtr def);
+void virStorageVolSnapDefFree(virStorageVolSnapDefPtr def);
 void virStoragePoolSourceClear(virStoragePoolSourcePtr source);
 void virStoragePoolSourceDeviceClear(virStoragePoolSourceDevicePtr dev);
 void virStoragePoolSourceFree(virStoragePoolSourcePtr source);
