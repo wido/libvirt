@@ -42,6 +42,7 @@
 VIR_LOG_INIT("storage.storage_backend_rbd");
 
 #define RBD_WRITE_CHUNK_SIZE 4096
+#define RBD_READ_CHUNK_SIZE 4096
 
 struct _virStorageBackendRBDState {
     rados_t cluster;
@@ -1328,6 +1329,105 @@ virStorageBackendRBDVolUpload(virConnectPtr conn,
     return ret;
 }
 
+static int
+virStorageBackendRBDVolDownload(virConnectPtr conn,
+                                virStoragePoolObjPtr pool,
+                                virStorageVolDefPtr vol,
+                                virStreamPtr stream,
+                                unsigned long long offset,
+                                unsigned long long length,
+                                unsigned int flags)
+{
+    virStorageBackendRBDState ptr;
+    ptr.cluster = NULL;
+    ptr.ioctx = NULL;
+    rbd_image_t image = NULL;
+    rbd_image_info_t info;
+    unsigned long long len;
+    int bytes;
+    int r = -1;
+    int ret = -1;
+    size_t read = 0;
+    char *buf;
+
+    virCheckFlags(0, -1);
+
+    if (virStorageBackendRBDOpenRADOSConn(&ptr, conn, &pool->def->source) < 0)
+        goto cleanup;
+
+    if (virStorageBackendRBDOpenIoCTX(&ptr, pool) < 0)
+        goto cleanup;
+
+    if ((r = rbd_open_read_only(ptr.ioctx, vol->name, &image, NULL)) < 0) {
+        virReportSystemError(-r, _("failed to open the RBD image %s/%s"),
+                             pool->def->source.name, vol->name);
+        goto cleanup;
+    }
+
+    if ((r = rbd_stat(image, &info, sizeof(info))) < 0) {
+        virReportSystemError(-r, _("failed to stat the RBD image %s/%s"),
+                             pool->def->source.name, vol->name);
+        goto cleanup;
+    }
+
+    len = info.size;
+    if (length > 0)
+        len = MIN(length, info.size);
+
+    VIR_DEBUG("Download %llu bytes with offset %llu from RBD image %s/%s",
+              len, offset, pool->def->source.name, vol->name);
+
+    virStreamRef(stream);
+
+    while (read < len) {
+        if (VIR_ALLOC_N(buf, RBD_READ_CHUNK_SIZE))
+            goto cleanup;
+
+        if ((bytes = rbd_read(image, offset, RBD_READ_CHUNK_SIZE, buf)) < 0) {
+            virReportSystemError(-bytes, _("failed to read %d bytes at offset "
+                                           "%llu from RBD image %s/%s"),
+                                 RBD_READ_CHUNK_SIZE, offset,
+                                 pool->def->source.name, vol->name);
+            goto cleanup;
+        }
+
+        VIR_DEBUG("Read %d bytes at offset %llu from RBD image %s/%s",
+                  bytes, offset, pool->def->source.name, vol->name);
+
+        if ((r = virStreamSend(stream, buf, bytes)) < 0) {
+            virReportSystemError(-r, _("failed to write %d bytes to the stream "
+                                       "for RBD image %s/%s"), bytes,
+                                 pool->def->source.name, vol->name);
+            goto cleanup;
+        }
+
+        read += bytes;
+        offset += bytes;
+    }
+
+    ret = 0;
+
+ cleanup:
+    if (image)
+        rbd_close(image);
+
+    virStorageBackendRBDCloseRADOSConn(&ptr);
+
+    VIR_FREE(buf);
+
+    if (r < 0)
+        virStreamAbort(stream);
+
+    r = virStreamFinish(stream);
+    if (r < 0)
+        virReportSystemError(-r, _("failed to finish the input stream for writing to RBD image %s/%s"),
+                             pool->def->source.name, vol->name);
+
+    virObjectUnref(stream);
+
+    return ret;
+}
+
 virStorageBackend virStorageBackendRBD = {
     .type = VIR_STORAGE_POOL_RBD,
 
@@ -1339,5 +1439,6 @@ virStorageBackend virStorageBackendRBD = {
     .deleteVol = virStorageBackendRBDDeleteVol,
     .resizeVol = virStorageBackendRBDResizeVol,
     .wipeVol = virStorageBackendRBDVolWipe,
-    .uploadVol = virStorageBackendRBDVolUpload
+    .uploadVol = virStorageBackendRBDVolUpload,
+    .downloadVol = virStorageBackendRBDVolDownload
 };
