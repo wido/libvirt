@@ -332,6 +332,44 @@ volStorageBackendRBDRefreshVolInfo(virStorageVolDefPtr vol,
     return ret;
 }
 
+#ifdef LIBRBD_SUPPORTS_AIO_OPEN
+static int volStorageBackendRBDRefreshVolInfoAsync(virStorageVolDefPtr vol,
+                                                   virStoragePoolObjPtr pool,
+                                                   virStorageBackendRBDStatePtr &ptr)
+{
+    int ret = -1;
+    int r = 0;
+    rbd_image_t image = NULL;
+    rbd_completion_t comp = NULL;
+
+    r = rbd_aio_create_completion((void*)&pool, (rbd_callback_t) rbd_open_cb, &comp);
+
+    r = rbd_aio_open(ptr->ioctx, vol->name, &image, NULL);
+    if (r < 0) {
+        ret = -r;
+        virReportSystemError(-r, _("failed to async open the RBD image '%s'"),
+                             vol->name);
+        goto cleanup;
+    }
+
+    ret = 0;
+
+ cleanup:
+    if (comp)
+        rbd_aio_release(comp);
+
+    if (!image && comp)
+        rbd_aio_close(NULL, comp);
+
+    if (image && !comp)
+        rbd_aio_close(image, NULL);
+
+    if (image && comp)
+        rbd_aio_close(image, comp);
+    return ret;
+}
+#endif
+
 static int
 virStorageBackendRBDRefreshPool(virConnectPtr conn,
                                 virStoragePoolObjPtr pool)
@@ -402,6 +440,22 @@ virStorageBackendRBDRefreshPool(virConnectPtr conn,
 
         name += strlen(name) + 1;
 
+        /* Librbd supports Asynchronous opening of RBD images. If so it will
+         * define LIBRBD_SUPPORTS_AIO_OPEN.
+         *
+         * During a pool refresh we can call rbd_aio_open() with a callback.
+         * The callback can then call rbd_stat() and add the result
+         * to Libvirt's volume list.
+         *
+         * This reduces the time of a pool refresh to a matter of seconds where
+         * it could take minutes for pools with thousands of images.
+         *
+         * This is because we open the rbd images in parallel which is a lot faster
+         * then calling rbd_open() / rbd_stat() in a loop.
+         */
+#ifdef LIBRBD_SUPPORTS_AIO_OPEN
+        r = volStorageBackendRBDRefreshVolInfoAsync(vol, pool, &ptr);
+#else
         r = volStorageBackendRBDRefreshVolInfo(vol, pool, &ptr);
 
         /* It could be that a volume has been deleted through a different route
@@ -426,6 +480,7 @@ virStorageBackendRBDRefreshPool(virConnectPtr conn,
             virStoragePoolObjClearVols(pool);
             goto cleanup;
         }
+#endif
     }
 
     VIR_DEBUG("Found %zu images in RBD pool %s",
