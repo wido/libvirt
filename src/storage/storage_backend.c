@@ -2056,7 +2056,16 @@ virStorageBackendVolWipeLocal(virConnectPtr conn ATTRIBUTE_UNUSED,
     struct stat st;
     virCommandPtr cmd = NULL;
 
-    virCheckFlags(0, -1);
+    virCheckFlags(VIR_STORAGE_VOL_WIPE_ALG_ZERO |
+                  VIR_STORAGE_VOL_WIPE_ALG_NNSA |
+                  VIR_STORAGE_VOL_WIPE_ALG_DOD |
+                  VIR_STORAGE_VOL_WIPE_ALG_BSI |
+                  VIR_STORAGE_VOL_WIPE_ALG_GUTMANN |
+                  VIR_STORAGE_VOL_WIPE_ALG_SCHNEIER |
+                  VIR_STORAGE_VOL_WIPE_ALG_PFITZNER7 |
+                  VIR_STORAGE_VOL_WIPE_ALG_PFITZNER33 |
+                  VIR_STORAGE_VOL_WIPE_ALG_RANDOM |
+                  VIR_STORAGE_VOL_WIPE_ALG_LAST, -1);
 
     VIR_DEBUG("Wiping volume with path '%s' and algorithm %u",
               vol->target.path, algorithm);
@@ -2078,7 +2087,7 @@ virStorageBackendVolWipeLocal(virConnectPtr conn ATTRIBUTE_UNUSED,
 
     if (algorithm != VIR_STORAGE_VOL_WIPE_ALG_ZERO) {
         const char *alg_char ATTRIBUTE_UNUSED = NULL;
-        switch (algorithm) {
+        switch ((virStorageVolWipeAlgorithm) algorithm) {
         case VIR_STORAGE_VOL_WIPE_ALG_NNSA:
             alg_char = "nnsa";
             break;
@@ -2107,6 +2116,7 @@ virStorageBackendVolWipeLocal(virConnectPtr conn ATTRIBUTE_UNUSED,
             virReportError(VIR_ERR_INVALID_ARG,
                            _("unsupported algorithm %d"),
                            algorithm);
+            goto cleanup;
         }
         cmd = virCommandNew(SCRUB);
         virCommandAddArgList(cmd, "-f", "-p", alg_char,
