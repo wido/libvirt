@@ -153,6 +153,9 @@ typedef enum {
 
     VIR_STORAGE_VOL_WIPE_ALG_RANDOM = 8, /* 1-pass random */
 
+    VIR_STORAGE_VOL_WIPE_ALG_TRIM = 9, /* 1-pass, trim all data on the
+                                          volume by using TRIM or DISCARD */
+
 # ifdef VIR_ENUM_SENTINELS
     VIR_STORAGE_VOL_WIPE_ALG_LAST
     /*

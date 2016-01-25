@@ -2065,6 +2065,7 @@ virStorageBackendVolWipeLocal(virConnectPtr conn ATTRIBUTE_UNUSED,
                   VIR_STORAGE_VOL_WIPE_ALG_PFITZNER7 |
                   VIR_STORAGE_VOL_WIPE_ALG_PFITZNER33 |
                   VIR_STORAGE_VOL_WIPE_ALG_RANDOM |
+                  VIR_STORAGE_VOL_WIPE_ALG_TRIM |
                   VIR_STORAGE_VOL_WIPE_ALG_LAST, -1);
 
     VIR_DEBUG("Wiping volume with path '%s' and algorithm %u",
@@ -2111,6 +2112,9 @@ virStorageBackendVolWipeLocal(virConnectPtr conn ATTRIBUTE_UNUSED,
             break;
         case VIR_STORAGE_VOL_WIPE_ALG_RANDOM:
             alg_char = "random";
+            break;
+        case VIR_STORAGE_VOL_WIPE_ALG_TRIM:
+            alg_char = "trim";
             break;
         default:
             virReportError(VIR_ERR_INVALID_ARG,

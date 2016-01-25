@@ -3546,6 +3546,7 @@ B<Supported algorithms>
   pfitzner7  - Roy Pfitzner's 7-random-pass method: random x7.
   pfitzner33 - Roy Pfitzner's 33-random-pass method: random x33.
   random     - 1-pass pattern: random.
+  trim       - 1-pass trimming the volume using TRIM or DISCARD
 
 B<Note>: The availability of algorithms may be limited by the version
 of the C<scrub> binary installed on the host.
