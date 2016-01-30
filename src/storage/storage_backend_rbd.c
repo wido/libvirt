@@ -1041,7 +1041,8 @@ static int virStorageBackendRBDResizeVol(virConnectPtr conn ATTRIBUTE_UNUSED,
     int ret = -1;
     int r = 0;
 
-    virCheckFlags(0, -1);
+    virCheckFlags(VIR_STORAGE_VOL_RESIZE_DELTA |
+                  VIR_STORAGE_VOL_RESIZE_SHRINK, -1);
 
     if (virStorageBackendRBDOpenRADOSConn(&ptr, conn, &pool->def->source) < 0)
         goto cleanup;
